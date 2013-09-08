@@ -1,0 +1,13 @@
+﻿<Window x:Class="MAS_Server.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MAS-Server" Height="350" Width="525">
+    <Grid FocusManager.FocusedElement="{Binding ElementName=CommandInput}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBox Background="LightCyan" FontFamily="Courier New" IsEnabled="False" TextWrapping="Wrap" Grid.Row="0" x:Name="CommandLog"></TextBox>
+        <TextBox Grid.Row="1" FontFamily="Courier New" Name="CommandInput" KeyDown="OnKeyDownHandler"></TextBox>
+    </Grid>
+</Window>
