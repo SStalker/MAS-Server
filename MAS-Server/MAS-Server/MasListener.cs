@@ -2,24 +2,36 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Windows;
+using System.Collections.Generic;
 
 namespace MAS_Server
 {
     class MasListener
     {
         private System.Windows.Controls.TextBox CommandLog;
-        private System.Collections.Queue CommandQueue;
+        private TcpListener listener;
+        private List<Client> clients;
 
         public MasListener(ref System.Windows.Controls.TextBox CommandLog)
         {
             this.CommandLog = CommandLog;
-            this.CommandQueue = new System.Collections.Queue();
+
+            Int32 port = 13000;
+            IPAddress localAddr = IPAddress.Parse("192.168.2.101"); // @TODO: Dynamically get current network ip
+            this.listener = new TcpListener(localAddr, port);
+            this.clients = new List<Client>();
+            listener.Start();
+            listener.BeginAcceptTcpClient(AcceptTcpClientCallback, null);
         }
 
-        public void AppendCommand(String command)
+        public void SendCommand(String command)
         {
-            Log("Appended command: " + command);
-            CommandQueue.Enqueue(command);
+            byte[] buffer = System.Text.Encoding.Unicode.GetBytes(command);
+            foreach (Client client in clients)
+            {
+                client.NetworkStream.BeginWrite(buffer, 0, buffer.Length,
+                    WriteCallback, client);
+            }
         }
 
         private void Log(String line)
@@ -40,76 +52,60 @@ namespace MAS_Server
             }
         }
 
-        public void StartListening()
+        private void AcceptTcpClientCallback(IAsyncResult result)
         {
-            TcpListener server = null;
-            try
+            TcpClient tcpClient = listener.EndAcceptTcpClient(result);
+            byte[] buffer = new byte[tcpClient.ReceiveBufferSize];
+            Client client = new Client(ref tcpClient, ref buffer);
+
+            lock (this.clients)
             {
-                // Set the TcpListener on port 13000.
-                Int32 port = 13000;
-                IPAddress localAddr = IPAddress.Parse("192.168.2.101"); // @TODO: Dynamically get current network ip
+                this.clients.Add(client);
+            }
 
-                server = new TcpListener(localAddr, port);
-                server.Start();
+            NetworkStream networkStream = client.NetworkStream;
+            networkStream.BeginRead(buffer, 0, buffer.Length,
+                ReadCallback, client);
+        }
 
-                Byte[] bytes = new Byte[256];
+        private void ReadCallback(IAsyncResult result)
+        {
+            Client client = result.AsyncState as Client;
+            NetworkStream networkStream = client.NetworkStream;
+            int read = networkStream.EndRead(result);
 
-
-                while (true)
+            if (read == 0)
+            {
+                lock (this.clients)
                 {
-                    try
-                    {
-
-                        Log("Waiting for a connection... ");
-                    }
-                    catch (InvalidOperationException e)
-                    {
-                        MessageBox.Show(e.ToString());
-                    }
-
-
-                    // Perform a blocking call to accept requests.
-                    // You could also user server.AcceptSocket() here.
-                    TcpClient client = server.AcceptTcpClient();
-                    Log("Connected!");
-
-                    // Get a stream object for reading and writing
-                    NetworkStream stream = client.GetStream();
-
-                    // Loop to receive all the data sent by the client.
-                    try
-                    {
-                        while (true)
-                        {
-                            // Pause 200 ms if command queue is empty
-                            while (CommandQueue.Count == 0) System.Threading.Thread.Sleep(200);
-
-                            // Get command from command queue
-                            String command = CommandQueue.Dequeue() as String;
-                            byte[] msg = System.Text.Encoding.Unicode.GetBytes(command);
-                            stream.Write(msg, 0, msg.Length);
-                        }
-                    }
-                    catch (System.IO.IOException e)
-                    {
-                        Log("Connection closed...");
-                        Console.WriteLine(e);
-                    }
-                    finally
-                    {
-                        // Shutdown and end connection
-                        client.Close();
-                    }
+                    this.clients.Remove(client);
+                    return;
                 }
             }
-            catch (SocketException e)
+
+            String data = System.Text.Encoding.Unicode.GetString(client.Buffer, 0, read);
+            Log(data);
+            networkStream.BeginRead(client.Buffer, 0, client.Buffer.Length, ReadCallback, client);
+        }
+
+        private void WriteCallback(IAsyncResult result)
+        {
+            Client client = result.AsyncState as Client;
+            NetworkStream networkStream = client.NetworkStream;
+            networkStream.EndWrite(result);
+        }
+
+        internal class Client
+        {
+            public String Name { get; set; }
+            public TcpClient TcpClient { get; set; }
+            public byte[] Buffer { get; set; }
+            public NetworkStream NetworkStream { get { return TcpClient.GetStream(); } }
+
+            public Client(ref TcpClient tcpClient, ref byte[] buffer)
             {
-                Log("SocketException: " + e);
-            }
-            finally
-            {
-                // Stop listening for new clients.
-                server.Stop();
+                this.TcpClient = tcpClient;
+                this.Buffer = buffer;
             }
         }
     }

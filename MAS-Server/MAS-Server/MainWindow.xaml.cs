@@ -16,9 +16,12 @@ namespace MAS_Server
         {
             InitializeComponent();
             listener = new MasListener(ref this.CommandLog);
+
+            /*
             listenerThread = new Thread(listener.StartListening);
             listenerThread.IsBackground = true; // background threads will be close on app exit
             listenerThread.Start();
+             */
         }
 
         private void OnKeyDownHandler(object sender, KeyEventArgs e)
@@ -34,9 +37,9 @@ namespace MAS_Server
             if (CommandInput.Text.Length == 0) return; // prevent empty commands
 
             if (CommandInput.Text.ToUpper().Equals("EXIT")) Application.Current.Shutdown();
-            else listener.AppendCommand(CommandInput.Text);
+            else listener.SendCommand(CommandInput.Text);
 
-            CommandLog.AppendText("> " + CommandInput.Text);
+            CommandLog.AppendText("> " + CommandInput.Text + "\r\n");
             CommandInput.Clear();
         }
     }
